@@ -1,0 +1,26 @@
+CREATE DATABASE IF NOT EXISTS netflow ON CLUSTER f_bigbro
+;
+
+CREATE TABLE netflow.netflow_statistics_sharded ON CLUSTER f_bigbro (
+   event_date Date,
+   event_ts DateTime,
+   agent_ip UInt32,
+   agent_interface_id UInt64,
+   user_ip UInt32,
+   network_mask_prefix UInt8,
+   user_network_ip UInt32,
+   num_threads UInt64,
+   num_packets UInt64,
+   num_bytes UInt64,
+   bandwidth UInt64,
+   num_events UInt64
+) ENGINE = ReplicatedMergeTree('/clickhouse/metadata/{shard}/f_bigbro/netflow_statistics_sharded', '{replica}',
+   event_date, (event_ts, agent_ip, agent_interface_id, user_network_ip), 8192)
+;
+
+CREATE TABLE IF NOT EXISTS netflow.netflow_statistics ON CLUSTER f_bigbro AS netflow.netflow_statistics_sharded
+  ENGINE = Distributed(f_bigbro, netflow, netflow_statistics_sharded, user_ip)
+;
+
+CREATE TABLE IF NOT EXISTS netflow.netflow_statistics_buffer ON CLUSTER f_bigbro AS netflow.netflow_statistics_sharded
+  ENGINE = Buffer(netflow, netflow_statistics, 16, 60, 300, 30000, 120000, 10485760, 268435456)
